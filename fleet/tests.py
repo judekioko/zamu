@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from . import stats
-from .models import Expense, Location, Remittance, Vehicle
+from .models import Expense, Location, PayerAlias, Remittance, Vehicle
 
 TODAY = date(2026, 10, 15)  # a Thursday
 
@@ -123,3 +123,69 @@ class LocationTests(TestCase):
             'start_date': date.today().isoformat(), 'active': 'on'})
         v.refresh_from_db()
         self.assertEqual((v.kind, v.location.name, v.moves.count()), ('boda', 'Kawangware', 1))
+
+
+SAMPLE = open('samples/mpesa_statement_sample.csv', encoding='utf-8').read()
+
+
+class StatementTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('amina', password='pw')
+        self.client.login(username='amina', password='pw')
+        self.a = Vehicle.objects.create(owner=self.user, reg='KDA 1', daily_target=3000,
+                                        driver_name='Otieno', driver_phone='0712345678',
+                                        start_date=date(2026, 10, 1))
+        self.b = Vehicle.objects.create(owner=self.user, reg='KCX 2', daily_target=2500,
+                                        driver_name='Wafula', driver_phone='0722000022',
+                                        start_date=date(2026, 10, 1))
+        self.c = Vehicle.objects.create(owner=self.user, reg='KMF 3', daily_target=700,
+                                        driver_name='Kevin', driver_phone='0733000333',
+                                        start_date=date(2026, 10, 1))
+
+    def test_parse_skips_junk_failed_and_money_out(self):
+        from . import mpesa
+        rows = mpesa.parse(SAMPLE)
+        self.assertEqual([r['receipt'] for r in rows],
+                         ['TJB1A2B3C4', 'TJB1A2B3C5', 'TJB1A2B3C6', 'TJB1A2B3C7'])
+        self.assertEqual(rows[1]['amount'], 2500)
+        self.assertEqual(rows[0]['date'], date(2026, 10, 9))
+
+    def test_suggest_by_full_phone_masked_phone_and_unknown(self):
+        from . import mpesa
+        rows = mpesa.parse(SAMPLE)
+        vs = [self.a, self.b, self.c]
+        got = [mpesa.suggest(r, vs, {}) for r in rows]
+        self.assertEqual(got, [self.a.pk, self.b.pk, self.c.pk, None])
+
+    def test_bad_file(self):
+        from . import mpesa
+        with self.assertRaises(mpesa.StatementError):
+            mpesa.parse('hello,world\n1,2\n')
+
+    def test_upload_confirm_dedupe_and_remember(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        up = SimpleUploadedFile('s.csv', SAMPLE.encode(), content_type='text/csv')
+        page = self.client.post(reverse('import'), {'statement': up})
+        self.assertContains(page, '3</strong> matched')
+        post = {'action': 'confirm', 'vehicle_0': self.a.pk, 'vehicle_1': self.b.pk,
+                'vehicle_2': self.c.pk, 'vehicle_3': self.a.pk, 'remember_3': 'on'}
+        self.client.post(reverse('import'), post)
+        self.assertEqual(Remittance.objects.count(), 4)
+        self.assertEqual(Remittance.objects.get(receipt='TJB1A2B3C5').vehicle, self.b)
+        self.assertEqual(Remittance.objects.get(receipt='TJB1A2B3C4').date, date(2026, 10, 9))
+        self.assertEqual(PayerAlias.objects.get().vehicle, self.a)
+        # Second upload: everything is already imported, the stranger is now remembered
+        up = SimpleUploadedFile('s.csv', SAMPLE.encode(), content_type='text/csv')
+        page = self.client.post(reverse('import'), {'statement': up})
+        self.assertContains(page, '4</strong> already imported')
+        self.client.post(reverse('import'), {'action': 'confirm', 'vehicle_0': self.a.pk})
+        self.assertEqual(Remittance.objects.count(), 4)  # duplicate receipt refused
+
+    def test_other_owners_vehicle_cannot_be_used(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        bob = User.objects.create_user('bob', password='pw')
+        theirs = Vehicle.objects.create(owner=bob, reg='BOB 1', daily_target=1)
+        up = SimpleUploadedFile('s.csv', SAMPLE.encode(), content_type='text/csv')
+        self.client.post(reverse('import'), {'statement': up})
+        self.client.post(reverse('import'), {'action': 'confirm', 'vehicle_0': theirs.pk})
+        self.assertEqual(Remittance.objects.count(), 0)

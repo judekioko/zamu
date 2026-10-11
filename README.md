@@ -6,6 +6,9 @@ see who is behind, message them on WhatsApp, track fuel and repair costs, and ra
 - **Today board:** every vehicle paid / short / not yet, with the running balance each driver owes.
 - **Off days** don't count against the driver. Payments on any past day can be recorded; mistakes can be deleted.
 - **Vehicle page:** 30-day table, costs, one-click WhatsApp message with the amount owed.
+- **M-Pesa import:** upload a statement CSV; incoming payments are matched to vehicles by the driver's phone
+  (full or masked) or name, you review, and receipts are never imported twice. Senders you assign are remembered.
+  Try it with `samples/mpesa_statement_sample.csv`.
 - **Report:** monthly collected vs expected, costs and net per vehicle, best to worst.
 
 ```

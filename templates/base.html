@@ -40,6 +40,7 @@
     <strong>Zamu</strong>
     {% if user.is_authenticated %}
       <a href="{% url 'dashboard' %}">Today</a>
+      <a href="{% url 'import' %}">Import</a>
       <a href="{% url 'report' %}">Report</a>
       <a href="{% url 'vehicle_add' %}">+ Vehicle</a>
       <form method="post" action="{% url 'logout' %}" style="display:inline">{% csrf_token %}<button class="alt" style="padding:4px 10px">Log out</button></form>

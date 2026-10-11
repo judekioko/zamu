@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block content %}
+<h1>Check the matches</h1>
+<p class="muted">{{ rows|length }} incoming payment(s): <strong>{{ matched }}</strong> matched{% if dups %}, <strong>{{ dups }}</strong> already imported{% endif %}. Pick a vehicle for any that are blank, or leave "Skip".</p>
+<form method="post" action="{% url 'import' %}">{% csrf_token %}
+  <input type="hidden" name="action" value="confirm">
+  {% for r in rows %}
+  <div class="card" {% if r.dup %}style="opacity:.55"{% endif %}>
+    <div class="row">
+      <div><strong>KES {{ r.amount|intcomma }}</strong> <span class="muted">{{ r.date|date:"j M Y" }}{% if r.receipt %} · {{ r.receipt }}{% endif %}</span>
+        <div class="muted">{{ r.details }}</div></div>
+      {% if r.dup %}<span class="pill muted">Already imported</span>{% endif %}
+    </div>
+    {% if not r.dup %}
+    <div class="row" style="margin-top:8px">
+      <select name="vehicle_{{ r.i }}" style="max-width:60%">
+        <option value="">Skip</option>
+        {% for v in fleet %}<option value="{{ v.pk }}" {% if v.pk == r.suggested %}selected{% endif %}>{{ v.label }}{% if v.driver_name %} — {{ v.driver_name }}{% endif %}</option>{% endfor %}
+      </select>
+      <label style="margin:0;font-weight:400"><input type="checkbox" name="remember_{{ r.i }}" style="width:auto" {% if not r.suggested %}checked{% endif %}> remember this sender</label>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  <button>Import selected</button> <a class="btn alt" href="{% url 'import' %}">Cancel</a>
+</form>
+{% endblock %}

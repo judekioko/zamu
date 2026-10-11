@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Import M-Pesa statement</h1>
+<p class="muted">Download your statement as CSV from M-Pesa (or your till / bank), then upload it here. Incoming payments are matched to vehicles by the driver's phone number or name. You review everything before anything is saved, and a receipt is never imported twice.</p>
+{% if error %}<p class="red">{{ error }}</p>{% endif %}
+<form method="post" enctype="multipart/form-data" class="card">{% csrf_token %}
+  <label for="statement">Statement (.csv)</label>
+  <input id="statement" type="file" name="statement" accept=".csv,text/csv" required>
+  <p><button>Read statement</button></p>
+</form>
+<p class="muted">Tip: make sure each vehicle has its driver's phone number, so matching works the first time. After you assign a sender once, tick "remember" and it is matched automatically next time.</p>
+{% endblock %}

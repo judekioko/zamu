@@ -66,6 +66,7 @@ class Remittance(models.Model):
                                  related_name='remittances')
     amount = models.PositiveIntegerField(default=0)
     is_off = models.BooleanField(default=False)
+    receipt = models.CharField('M-Pesa receipt', max_length=30, blank=True, db_index=True)
     note = models.CharField(max_length=120, blank=True)
 
     class Meta:
@@ -96,3 +97,13 @@ class Move(models.Model):
 
     class Meta:
         ordering = ['-date', '-id']
+
+
+class PayerAlias(models.Model):
+    """Remembers that payments from this sender belong to this vehicle."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    key = models.CharField(max_length=80)
+    vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='aliases')
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['owner', 'key'], name='unique_alias_per_owner')]

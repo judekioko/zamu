@@ -14,5 +14,6 @@ urlpatterns = [
     path('vehicles/<int:pk>/expense/', views.add_expense, name='add_expense'),
     path('remittance/<int:pk>/delete/', views.delete_remittance, name='delete_remittance'),
     path('expense/<int:pk>/delete/', views.delete_expense, name='delete_expense'),
+    path('import/', views.statement_import, name='import'),
     path('report/', views.report, name='report'),
 ]

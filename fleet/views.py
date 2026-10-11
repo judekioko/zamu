@@ -3,13 +3,14 @@ from urllib.parse import quote
 
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from . import stats
+from . import mpesa, stats
 from .forms import ExpenseForm, MoveForm, RemittanceForm, SignupForm, VehicleForm
-from .models import Expense, Location, Move, Remittance, Vehicle
+from .models import Expense, Location, Move, PayerAlias, Remittance, Vehicle
 
 
 def _vehicle(request, pk):
@@ -203,3 +204,64 @@ def report(request):
         'expenses': sum(s.month_expenses for s in snaps),
         'net': sum(s.month_net for s in snaps),
     })
+
+
+@login_required
+def statement_import(request):
+    """Step 1: upload a statement. Step 2 (POST with action=confirm): save the ticked rows."""
+    fleet = list(Vehicle.objects.filter(owner=request.user, active=True))
+    if request.method == 'POST' and request.POST.get('action') == 'confirm':
+        rows = request.session.pop('statement_rows', [])
+        valid = {str(v.pk): v for v in fleet}
+        saved = 0
+        for i, row in enumerate(rows):
+            v = valid.get(request.POST.get(f'vehicle_{i}', ''))
+            if v is None:
+                continue
+            if row['receipt'] and Remittance.objects.filter(
+                    vehicle__owner=request.user, receipt=row['receipt']).exists():
+                continue
+            Remittance.objects.create(
+                vehicle=v, date=date.fromisoformat(row['date']), amount=row['amount'],
+                location=v.location, receipt=row['receipt'],
+                note=f"M-Pesa {row['details'][:80]}".strip())
+            if request.POST.get(f'remember_{i}'):
+                PayerAlias.objects.update_or_create(owner=request.user, key=row['key'],
+                                                    defaults={'vehicle': v})
+            saved += 1
+        messages.success(request, f'Imported {saved} payment(s).')
+        return redirect('dashboard')
+
+    error = ''
+    if request.method == 'POST' and request.FILES.get('statement'):
+        f = request.FILES['statement']
+        if f.size > 5_000_000:
+            error = 'That file is too big (5 MB limit).'
+        else:
+            try:
+                parsed = mpesa.parse(f.read())
+            except mpesa.StatementError as e:
+                error = str(e)
+            else:
+                aliases = {a.key: a.vehicle_id for a in PayerAlias.objects.filter(owner=request.user)}
+                known = set(Remittance.objects.filter(vehicle__owner=request.user)
+                            .exclude(receipt='').values_list('receipt', flat=True))
+                rows, shown = [], []
+                for r in parsed:
+                    dup = bool(r['receipt']) and r['receipt'] in known
+                    r['suggested'] = None if dup else mpesa.suggest(r, fleet, aliases)
+                    r['dup'] = dup
+                    rows.append({**r, 'date': r['date'].isoformat()})
+                    shown.append({**r, 'i': len(shown)})
+                request.session['statement_rows'] = [
+                    {k: r[k] for k in ('receipt', 'date', 'details', 'amount', 'key')} for r in rows]
+                return render(request, 'import_preview.html', {
+                    'rows': shown, 'fleet': fleet,
+                    'matched': sum(1 for r in shown if r['suggested']),
+                    'dups': sum(1 for r in shown if r['dup']),
+                })
+        if not error:
+            error = 'No incoming payments were found in that file.'
+    elif request.method == 'POST':
+        error = 'Choose a file first.'
+    return render(request, 'import_upload.html', {'error': error})
