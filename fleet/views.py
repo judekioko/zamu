@@ -8,8 +8,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from . import stats
-from .forms import ExpenseForm, RemittanceForm, SignupForm, VehicleForm
-from .models import Expense, Remittance, Vehicle
+from .forms import ExpenseForm, MoveForm, RemittanceForm, SignupForm, VehicleForm
+from .models import Expense, Location, Move, Remittance, Vehicle
 
 
 def _vehicle(request, pk):
@@ -18,6 +18,19 @@ def _vehicle(request, pk):
 
 def _fleet(user):
     return Vehicle.objects.filter(owner=user, active=True).prefetch_related('remittances', 'expenses')
+
+
+def _location(user, name):
+    name = ' '.join(name.split())
+    if not name:
+        return None
+    found = Location.objects.filter(owner=user, name__iexact=name).first()
+    return found or Location.objects.create(owner=user, name=name)
+
+
+def _remit(vehicle, **kw):
+    kw.setdefault('location', vehicle.location)
+    return Remittance.objects.create(vehicle=vehicle, **kw)
 
 
 def signup(request):
@@ -30,11 +43,17 @@ def signup(request):
 
 @login_required
 def dashboard(request):
-    snaps = [stats.snapshot(v) for v in _fleet(request.user)]
+    fleet = _fleet(request.user)
+    loc = request.GET.get('loc', '')
+    if loc.isdigit():
+        fleet = fleet.filter(location_id=int(loc))
+    snaps = [stats.snapshot(v) for v in fleet]
     order = {'waiting': 0, 'short': 1, 'paid': 2, 'off': 3}
     snaps.sort(key=lambda s: (order[s.status], -s.arrears))
     return render(request, 'dashboard.html', {
         'snaps': snaps,
+        'locations': Location.objects.filter(owner=request.user, vehicles__active=True).distinct(),
+        'loc': loc,
         'today': date.today(),
         'collected_today': sum(s.paid_today for s in snaps),
         'target_today': sum(s.vehicle.daily_target for s in snaps if not s.off_today),
@@ -50,7 +69,15 @@ def vehicle_form(request, pk=None):
     if request.method == 'POST' and form.is_valid():
         v = form.save(commit=False)
         v.owner = request.user
+        new_loc = _location(request.user, form.cleaned_data['location_name'])
+        old_loc = instance.location if instance else None
+        if new_loc != old_loc and new_loc:
+            v.location = new_loc
         v.save()
+        if new_loc and new_loc != old_loc:
+            Move.objects.create(vehicle=v, from_location=old_loc, to_location=new_loc,
+                                date=v.start_date if instance is None else date.today(),
+                                note='Started here' if instance is None else '')
         return redirect('vehicle', pk=v.pk)
     return render(request, 'vehicle_form.html', {'form': form, 'editing': instance})
 
@@ -62,6 +89,7 @@ def vehicle_detail(request, pk):
     if request.method == 'POST' and rform.is_valid():
         r = rform.save(commit=False)
         r.vehicle = v
+        r.location = v.location
         r.save()
         return redirect('vehicle', pk=v.pk)
     snap = stats.snapshot(v)
@@ -74,6 +102,7 @@ def vehicle_detail(request, pk):
     return render(request, 'vehicle.html', {
         'v': v, 'snap': snap, 'rform': rform, 'eform': ExpenseForm(),
         'table': stats.daily_table(v), 'expenses': v.expenses.all()[:15],
+        'mform': MoveForm(), 'moves': v.moves.select_related('from_location', 'to_location')[:10],
         'text': text, 'wa': f'https://wa.me/{v.driver_phone}?text={quote(text)}'
         if text and v.driver_phone else '',
     })
@@ -88,7 +117,7 @@ def quick_paid(request, pk):
     except ValueError:
         amount = 0
     if amount > 0:
-        Remittance.objects.create(vehicle=v, amount=amount)
+        _remit(v, amount=amount)
     return redirect('dashboard')
 
 
@@ -96,9 +125,24 @@ def quick_paid(request, pk):
 @require_POST
 def mark_off(request, pk):
     v = _vehicle(request, pk)
-    Remittance.objects.get_or_create(vehicle=v, date=date.today(), is_off=True,
-                                     defaults={'amount': 0, 'note': 'Off day'})
+    if not v.remittances.filter(date=date.today(), is_off=True).exists():
+        _remit(v, is_off=True, amount=0, note='Off day')
     return redirect('dashboard')
+
+
+@login_required
+@require_POST
+def move_vehicle(request, pk):
+    v = _vehicle(request, pk)
+    form = MoveForm(request.POST)
+    if form.is_valid():
+        dest = _location(request.user, form.cleaned_data['to_name'])
+        if dest and dest != v.location:
+            Move.objects.create(vehicle=v, from_location=v.location, to_location=dest,
+                                date=form.cleaned_data['date'], note=form.cleaned_data['note'])
+            v.location = dest
+            v.save()
+    return redirect('vehicle', pk=v.pk)
 
 
 @login_required
@@ -143,10 +187,17 @@ def report(request):
         raise Http404
     snaps = sorted((stats.snapshot(v, today, day) for v in _fleet(request.user)),
                    key=lambda s: -s.month_net)
+    first, last = stats.month_bounds(day)
+    by_loc = {}
+    for r in Remittance.objects.filter(vehicle__owner=request.user, date__range=(first, last),
+                                       is_off=False).select_related('location'):
+        name = r.location.name if r.location else 'No location'
+        by_loc[name] = by_loc.get(name, 0) + r.amount
+    by_loc = sorted(by_loc.items(), key=lambda kv: -kv[1])
     prev = (day - timedelta(days=1)).replace(day=1)
     nxt = (day + timedelta(days=32)).replace(day=1)
     return render(request, 'report.html', {
-        'snaps': snaps, 'day': day, 'prev': prev, 'next': nxt if nxt <= today else None,
+        'snaps': snaps, 'by_loc': by_loc, 'day': day, 'prev': prev, 'next': nxt if nxt <= today else None,
         'collected': sum(s.month_collected for s in snaps),
         'expected': sum(s.month_expected for s in snaps),
         'expenses': sum(s.month_expenses for s in snaps),

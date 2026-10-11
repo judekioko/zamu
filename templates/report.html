@@ -12,6 +12,8 @@
   <div class="card"><div class="muted">Costs</div><div class="big">{{ expenses|intcomma }}</div></div>
   <div class="card"><div class="muted">Net</div><div class="big {% if net < 0 %}red{% else %}green{% endif %}">{{ net|intcomma }}</div></div>
 </div>
+{% if by_loc %}<h2>Collected by location</h2>
+<div class="card">{% for name, amt in by_loc %}<div class="row"><span>{{ name }}</span><strong>{{ amt|intcomma }}</strong></div>{% endfor %}</div>{% endif %}
 <h2>Best to worst earner</h2>
 {% for s in snaps %}
 <a href="{% url 'vehicle' s.vehicle.pk %}" style="color:inherit"><div class="card row">

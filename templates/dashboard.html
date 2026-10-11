@@ -9,12 +9,18 @@
   <div class="card"><div class="muted">Vehicles</div><div class="big">{{ snaps|length }}</div></div>
 </div>
 
+{% if locations|length > 1 or loc %}
+<div class="row" style="justify-content:flex-start; margin-bottom:12px">
+  <a class="btn {% if loc %}alt{% endif %}" href="{% url 'dashboard' %}" style="padding:4px 12px">All</a>
+  {% for l in locations %}<a class="btn {% if loc != l.pk|stringformat:'d' %}alt{% endif %}" href="?loc={{ l.pk }}" style="padding:4px 12px">{{ l.name }}</a>{% endfor %}
+</div>
+{% endif %}
 {% for s in snaps %}
 <div class="card">
   <div class="row">
     <a href="{% url 'vehicle' s.vehicle.pk %}" style="color:inherit">
       <strong>{{ s.vehicle.label }}</strong>
-      <div class="muted">{{ s.vehicle.driver_name|default:"No driver set" }} · target {{ s.vehicle.daily_target|intcomma }}</div>
+      <div class="muted">{% if s.vehicle.location %}{{ s.vehicle.location.name }} · {% endif %}{{ s.vehicle.driver_name|default:"No driver set" }} · target {{ s.vehicle.daily_target|intcomma }}</div>
     </a>
     <div style="text-align:right">
       {% if s.status == 'paid' %}<span class="pill green">Paid {{ s.paid_today|intcomma }}</span>

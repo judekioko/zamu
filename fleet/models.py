@@ -13,8 +13,26 @@ def normalize_phone(raw):
     return digits
 
 
-class Vehicle(models.Model):
+class Location(models.Model):
+    """A route, stage, town or yard a vehicle works from."""
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    name = models.CharField(max_length=80)
+
+    class Meta:
+        ordering = ['name']
+        constraints = [models.UniqueConstraint(fields=['owner', 'name'], name='unique_location_per_owner')]
+
+    def __str__(self):
+        return self.name
+
+
+class Vehicle(models.Model):
+    KINDS = [('matatu', 'Matatu'), ('boda', 'Boda boda'), ('taxi', 'Taxi'),
+             ('tuktuk', 'Tuk-tuk'), ('truck', 'Truck'), ('other', 'Other')]
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    kind = models.CharField('Type', max_length=8, choices=KINDS, default='matatu')
+    location = models.ForeignKey(Location, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name='vehicles')
     reg = models.CharField('Registration', max_length=20)
     nickname = models.CharField(max_length=40, blank=True)
     driver_name = models.CharField(max_length=80, blank=True)
@@ -44,6 +62,8 @@ class Remittance(models.Model):
     """Money handed to the owner for a day. An 'off' record means no target that day."""
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='remittances')
     date = models.DateField(default=date.today)
+    location = models.ForeignKey(Location, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name='remittances')
     amount = models.PositiveIntegerField(default=0)
     is_off = models.BooleanField(default=False)
     note = models.CharField(max_length=120, blank=True)
@@ -59,6 +79,19 @@ class Expense(models.Model):
     date = models.DateField(default=date.today)
     category = models.CharField(max_length=12, choices=CATEGORIES, default='repair')
     amount = models.PositiveIntegerField()
+    note = models.CharField(max_length=120, blank=True)
+
+    class Meta:
+        ordering = ['-date', '-id']
+
+
+class Move(models.Model):
+    """A vehicle moving from one location to another."""
+    vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='moves')
+    from_location = models.ForeignKey(Location, null=True, blank=True, on_delete=models.SET_NULL,
+                                      related_name='+')
+    to_location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='+')
+    date = models.DateField(default=date.today)
     note = models.CharField(max_length=120, blank=True)
 
     class Meta:

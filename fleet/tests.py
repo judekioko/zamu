@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from . import stats
-from .models import Expense, Remittance, Vehicle
+from .models import Expense, Location, Remittance, Vehicle
 
 TODAY = date(2026, 10, 15)  # a Thursday
 
@@ -86,3 +86,40 @@ class ViewTests(TestCase):
         r = self.client.post(reverse('vehicle_add'), {'reg': 'KCA 123A', 'daily_target': 800,
                                                       'start_date': date.today().isoformat(), 'active': 'on'})
         self.assertContains(r, 'already have this vehicle')
+
+
+class LocationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('amina', password='pw')
+        self.client.login(username='amina', password='pw')
+
+    def test_add_with_location_then_move_and_earnings_follow(self):
+        self.client.post(reverse('vehicle_add'), {
+            'reg': 'kca 1a', 'kind': 'matatu', 'location_name': 'Githurai route', 'daily_target': 2000,
+            'start_date': date.today().isoformat(), 'active': 'on'})
+        v = Vehicle.objects.get()
+        first = v.location
+        self.assertEqual(first.name, 'Githurai route')
+        self.client.post(reverse('quick_paid', args=[v.pk]), {'amount': '2000'})
+        self.client.post(reverse('move', args=[v.pk]), {
+            'to_name': 'githurai ROUTE', 'date': date.today().isoformat()})  # same place: ignored
+        self.assertEqual(v.moves.count(), 1)
+        self.client.post(reverse('move', args=[v.pk]), {
+            'to_name': 'Thika Road', 'date': date.today().isoformat(), 'note': 'Slow on Githurai'})
+        v.refresh_from_db()
+        self.assertEqual(v.location.name, 'Thika Road')
+        self.assertEqual(v.moves.count(), 2)
+        self.client.post(reverse('quick_paid', args=[v.pk]), {'amount': '500'})
+        page = self.client.get(reverse('report'))
+        self.assertContains(page, 'Githurai route')
+        self.assertContains(page, 'Thika Road')
+        self.assertContains(self.client.get(reverse('dashboard') + f'?loc={v.location_id}'), 'KCA 1A')
+        self.assertNotContains(self.client.get(reverse('dashboard') + f'?loc={first.pk}'), 'KCA 1A')
+
+    def test_edit_vehicle_location_logs_move(self):
+        v = Vehicle.objects.create(owner=self.user, reg='KBB 2', daily_target=700, start_date=date.today())
+        self.client.post(reverse('vehicle_edit', args=[v.pk]), {
+            'reg': 'KBB 2', 'kind': 'boda', 'location_name': 'Kawangware', 'daily_target': 700,
+            'start_date': date.today().isoformat(), 'active': 'on'})
+        v.refresh_from_db()
+        self.assertEqual((v.kind, v.location.name, v.moves.count()), ('boda', 'Kawangware', 1))

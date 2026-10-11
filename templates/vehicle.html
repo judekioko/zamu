@@ -3,7 +3,7 @@
 {% block content %}
 <a href="{% url 'dashboard' %}">← Back</a>
 <div class="row"><h1 style="margin:8px 0">{{ v.label }}</h1><a href="{% url 'vehicle_edit' v.pk %}">Edit</a></div>
-<p class="muted">{{ v.driver_name|default:"No driver set" }} {{ v.driver_phone }} · target KES {{ v.daily_target|intcomma }}/day · tracking since {{ v.start_date|date:"j M Y" }}</p>
+<p class="muted">{{ v.get_kind_display }}{% if v.location %} · at <strong>{{ v.location.name }}</strong>{% endif %} · {{ v.driver_name|default:"No driver set" }} {{ v.driver_phone }} · target KES {{ v.daily_target|intcomma }}/day · tracking since {{ v.start_date|date:"j M Y" }}</p>
 
 <div class="stats" style="grid-template-columns:repeat(3,1fr)">
   <div class="card"><div class="muted">Driver owes</div><div class="big {% if snap.arrears > 0 %}red{% elif snap.arrears < 0 %}green{% endif %}">{{ snap.arrears|intcomma }}</div></div>
@@ -18,6 +18,13 @@
   {% if wa %}<a class="btn" href="{{ wa }}" target="_blank" rel="noopener">Open in WhatsApp</a>{% else %}<span class="muted">Add the driver's phone to get a WhatsApp link.</span>{% endif %}
 </div>
 {% endif %}
+
+<h2>Move to another location</h2>
+<form method="post" action="{% url 'move' v.pk %}" class="card">{% csrf_token %}
+  {% for f in mform %}<label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% endfor %}
+  <p><button class="alt">Record move</button></p>
+</form>
+{% for m in moves %}<div class="card muted">{{ m.date|date:"j M Y" }} · {% if m.from_location %}{{ m.from_location.name }} → {% endif %}<strong>{{ m.to_location.name }}</strong> {{ m.note }}</div>{% endfor %}
 
 <h2>Record money received (any day)</h2>
 <form method="post" class="card">{% csrf_token %}
