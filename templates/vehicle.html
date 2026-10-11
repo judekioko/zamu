@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block content %}
+<a href="{% url 'dashboard' %}">← Back</a>
+<div class="row"><h1 style="margin:8px 0">{{ v.label }}</h1><a href="{% url 'vehicle_edit' v.pk %}">Edit</a></div>
+<p class="muted">{{ v.driver_name|default:"No driver set" }} {{ v.driver_phone }} · target KES {{ v.daily_target|intcomma }}/day · tracking since {{ v.start_date|date:"j M Y" }}</p>
+
+<div class="stats" style="grid-template-columns:repeat(3,1fr)">
+  <div class="card"><div class="muted">Driver owes</div><div class="big {% if snap.arrears > 0 %}red{% elif snap.arrears < 0 %}green{% endif %}">{{ snap.arrears|intcomma }}</div></div>
+  <div class="card"><div class="muted">Collected this month</div><div class="big">{{ snap.month_collected|intcomma }}</div><div class="muted">of {{ snap.month_expected|intcomma }} expected</div></div>
+  <div class="card"><div class="muted">Net this month</div><div class="big {% if snap.month_net < 0 %}red{% else %}green{% endif %}">{{ snap.month_net|intcomma }}</div><div class="muted">after {{ snap.month_expenses|intcomma }} costs</div></div>
+</div>
+
+{% if text %}
+<h2>Message the driver</h2>
+<div class="card">
+  <p style="margin-top:0">{{ text }}</p>
+  {% if wa %}<a class="btn" href="{{ wa }}" target="_blank" rel="noopener">Open in WhatsApp</a>{% else %}<span class="muted">Add the driver's phone to get a WhatsApp link.</span>{% endif %}
+</div>
+{% endif %}
+
+<h2>Record money received (any day)</h2>
+<form method="post" class="card">{% csrf_token %}
+  {% for f in rform %}<label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{{ f.errors }}{% endfor %}
+  <p><button>Save</button></p>
+</form>
+
+<h2>Last 30 days</h2>
+<div class="card"><table>
+  <tr><th>Date</th><th class="n">Paid</th><th class="n">Target</th><th class="n">Diff</th><th></th></tr>
+  {% for d, paid, target, off, diff in table %}
+  <tr>
+    <td>{{ d|date:"D j M" }}</td>
+    <td class="n">{{ paid|intcomma }}</td>
+    <td class="n">{% if off %}off{% else %}{{ target|intcomma }}{% endif %}</td>
+    <td class="n {% if diff < 0 %}red{% else %}green{% endif %}">{% if off %}–{% else %}{{ diff|intcomma }}{% endif %}</td>
+    <td></td>
+  </tr>
+  {% endfor %}
+</table></div>
+
+<h2>Costs</h2>
+<form method="post" action="{% url 'add_expense' v.pk %}" class="card">{% csrf_token %}
+  {% for f in eform %}<label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% endfor %}
+  <p><button class="alt">Add cost</button></p>
+</form>
+{% for e in expenses %}
+<div class="card row"><span>{{ e.date|date:"j M" }} · {{ e.get_category_display }} {{ e.note }}</span>
+  <span><strong>{{ e.amount|intcomma }}</strong>
+  <form method="post" action="{% url 'delete_expense' e.pk %}" style="display:inline">{% csrf_token %}<button class="del" title="Delete">✕</button></form></span></div>
+{% endfor %}
+
+<h2>Recent entries</h2>
+{% for r in v.remittances.all|slice:":15" %}
+<div class="card row"><span>{{ r.date|date:"j M" }} · {% if r.is_off %}Off day{% else %}Received{% endif %} {{ r.note }}</span>
+  <span><strong>{% if not r.is_off %}{{ r.amount|intcomma }}{% endif %}</strong>
+  <form method="post" action="{% url 'delete_remittance' r.pk %}" style="display:inline">{% csrf_token %}<button class="del" title="Delete">✕</button></form></span></div>
+{% endfor %}
+{% endblock %}

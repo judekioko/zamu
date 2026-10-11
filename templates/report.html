@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block content %}
+<div class="row">
+  <a href="{% url 'report' %}?month={{ prev|date:'Y-m' }}">← {{ prev|date:"M Y" }}</a>
+  <h1 style="margin:0">{{ day|date:"F Y" }}</h1>
+  {% if next %}<a href="{% url 'report' %}?month={{ next|date:'Y-m' }}">{{ next|date:"M Y" }} →</a>{% else %}<span></span>{% endif %}
+</div>
+<div class="stats" style="margin-top:16px">
+  <div class="card"><div class="muted">Collected</div><div class="big">{{ collected|intcomma }}</div></div>
+  <div class="card"><div class="muted">Expected</div><div class="big">{{ expected|intcomma }}</div></div>
+  <div class="card"><div class="muted">Costs</div><div class="big">{{ expenses|intcomma }}</div></div>
+  <div class="card"><div class="muted">Net</div><div class="big {% if net < 0 %}red{% else %}green{% endif %}">{{ net|intcomma }}</div></div>
+</div>
+<h2>Best to worst earner</h2>
+{% for s in snaps %}
+<a href="{% url 'vehicle' s.vehicle.pk %}" style="color:inherit"><div class="card row">
+  <div><strong>{{ s.vehicle.label }}</strong><div class="muted">{{ s.vehicle.driver_name }}</div></div>
+  <div style="text-align:right"><strong class="{% if s.month_net < 0 %}red{% else %}green{% endif %}">{{ s.month_net|intcomma }}</strong>
+    <div class="muted">collected {{ s.month_collected|intcomma }} / {{ s.month_expected|intcomma }}{% if s.month_shortfall %} · <span class="red">short {{ s.month_shortfall|intcomma }}</span>{% endif %} · costs {{ s.month_expenses|intcomma }}</div></div>
+</div></a>
+{% empty %}<p class="muted">No vehicles yet.</p>{% endfor %}
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{% if editing %}Edit {{ editing.reg }}{% else %}Add a vehicle{% endif %}</h1>
+<form method="post" class="card">{% csrf_token %}
+  {% for f in form %}
+    {% if f.field.widget.input_type == 'checkbox' %}
+      <label><input type="checkbox" name="{{ f.html_name }}" style="width:auto" {% if f.value %}checked{% endif %}> {{ f.label }}</label>
+    {% else %}
+      <label for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}
+    {% endif %}
+    {{ f.errors }}
+  {% endfor %}
+  <p><button>Save</button></p>
+</form>
+{% endblock %}

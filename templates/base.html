@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zamu</title>
+<style>
+  :root { --bg:#f6f7f5; --card:#fff; --ink:#1c2420; --muted:#66706a; --green:#1f7a4d; --red:#b3261e; --amber:#a66300; --line:#e2e6e3; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#121513; --card:#1b201d; --ink:#e8ece9; --muted:#9aa59e; --green:#4cc38a; --red:#ff8a80; --amber:#f0b45a; --line:#2b322d; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui,sans-serif; }
+  .wrap { max-width:760px; margin:0 auto; padding:0 16px 48px; }
+  nav { display:flex; gap:16px; align-items:center; padding:16px 0; border-bottom:1px solid var(--line); margin-bottom:20px; flex-wrap:wrap; }
+  nav strong { font-size:20px; margin-right:auto; }
+  a { color:var(--green); text-decoration:none; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
+  .row { display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; }
+  .muted { color:var(--muted); font-size:14px; }
+  .big { font-size:26px; font-weight:700; }
+  .red { color:var(--red); } .amber { color:var(--amber); } .green { color:var(--green); }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px; }
+  .stats .card { margin:0; }
+  h2 { font-size:15px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:24px 0 8px; }
+  label { display:block; margin:12px 0 4px; font-weight:600; }
+  input, select { width:100%; padding:10px; font:inherit; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); }
+  button, .btn { display:inline-block; background:var(--green); color:#fff; border:0; border-radius:8px; padding:10px 16px; font:inherit; font-weight:600; cursor:pointer; }
+  .btn.alt, button.alt { background:transparent; color:var(--green); border:1px solid var(--green); }
+  button.del { background:none; color:var(--red); border:0; padding:0 4px; font-weight:400; }
+  .errorlist { color:var(--red); list-style:none; padding:0; margin:4px 0; }
+  .pill { font-size:12px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid currentColor; }
+  .inline { display:flex; gap:8px; } .inline input { width:110px; }
+  table { width:100%; border-collapse:collapse; } td, th { padding:6px 4px; border-bottom:1px solid var(--line); text-align:left; font-size:14px; }
+  td.n, th.n { text-align:right; }
+  @media (max-width:560px) { .stats { grid-template-columns:1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <strong>Zamu</strong>
+    {% if user.is_authenticated %}
+      <a href="{% url 'dashboard' %}">Today</a>
+      <a href="{% url 'report' %}">Report</a>
+      <a href="{% url 'vehicle_add' %}">+ Vehicle</a>
+      <form method="post" action="{% url 'logout' %}" style="display:inline">{% csrf_token %}<button class="alt" style="padding:4px 10px">Log out</button></form>
+    {% endif %}
+  </nav>
+  {% block content %}{% endblock %}
+</div>
+</body>
+</html>

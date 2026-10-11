@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block content %}
+<p class="muted" style="margin-top:0">{{ today|date:"l j F" }}</p>
+<div class="stats">
+  <div class="card"><div class="muted">Collected today</div><div class="big">{{ collected_today|intcomma }}</div><div class="muted">of {{ target_today|intcomma }}</div></div>
+  <div class="card"><div class="muted">Drivers owe you</div><div class="big {% if arrears_total %}red{% endif %}">{{ arrears_total|intcomma }}</div></div>
+  <div class="card"><div class="muted">Net this month</div><div class="big {% if month_net < 0 %}red{% else %}green{% endif %}">{{ month_net|intcomma }}</div></div>
+  <div class="card"><div class="muted">Vehicles</div><div class="big">{{ snaps|length }}</div></div>
+</div>
+
+{% for s in snaps %}
+<div class="card">
+  <div class="row">
+    <a href="{% url 'vehicle' s.vehicle.pk %}" style="color:inherit">
+      <strong>{{ s.vehicle.label }}</strong>
+      <div class="muted">{{ s.vehicle.driver_name|default:"No driver set" }} · target {{ s.vehicle.daily_target|intcomma }}</div>
+    </a>
+    <div style="text-align:right">
+      {% if s.status == 'paid' %}<span class="pill green">Paid {{ s.paid_today|intcomma }}</span>
+      {% elif s.status == 'off' %}<span class="pill muted">Off today</span>
+      {% elif s.status == 'short' %}<span class="pill amber">Short: {{ s.paid_today|intcomma }}</span>
+      {% else %}<span class="pill red">Not paid yet</span>{% endif %}
+      {% if s.arrears > 0 %}<div class="muted red">owes {{ s.arrears|intcomma }}</div>
+      {% elif s.arrears < 0 %}<div class="muted green">ahead {{ s.arrears|cut:"-"|intcomma }}</div>{% endif %}
+    </div>
+  </div>
+  {% if s.status != 'paid' and s.status != 'off' %}
+  <div class="row" style="margin-top:10px">
+    <form method="post" action="{% url 'quick_paid' s.vehicle.pk %}" class="inline">{% csrf_token %}
+      <input type="number" name="amount" min="1" inputmode="numeric" placeholder="Amount" value="{{ s.vehicle.daily_target }}">
+      <button>Received</button>
+    </form>
+    <form method="post" action="{% url 'mark_off' s.vehicle.pk %}">{% csrf_token %}<button class="alt">Off today</button></form>
+  </div>
+  {% endif %}
+</div>
+{% empty %}
+<div class="card"><p>No vehicles yet.</p><a class="btn" href="{% url 'vehicle_add' %}">Add your first vehicle</a></div>
+{% endfor %}
+{% endblock %}
